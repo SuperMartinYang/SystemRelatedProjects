@@ -8,7 +8,7 @@
 
 struct DFS_ENTRY {
 	struct DFS_ENTRY * prev;
-	struct IO_CALLTABLE * calltable;
+	struct IO_CALLTABLE * calltable;	// SEE THE WEIRD PTR, USED IN THE END OF DFS.C
 	char * name;
 	int type;
 };
