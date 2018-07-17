@@ -13,6 +13,10 @@ Fields in Device file system (DFS)
 
 ## FAT.H
 ### Structures
+
+Partition <br />Boot <br /> Sector | FAT1 | FAT2 <br /> (duplicate) | Root <br /> folder | other folders and all files |
+---|---|---|---|---	
+
 Fields in FAT_BOOTSECTOR16
 
 
@@ -20,6 +24,11 @@ Fields in FAT_BOOTSECTOR32
 
 
 Fields in FAT_BOOTSECTOR
+
+Byte Offset (in hex) | Field Length | Sample Value | Meaning
+---|---:|---:|---
+00 | 3 bytes | EB 3C 90 | Jump instruction
+03 | 8 bytes | MSDOS5.0 | OEM Name in text
 
 
 Fields in FAT_ENTRY
