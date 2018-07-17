@@ -44,11 +44,13 @@ struct FAT_BOOTSETOR16
 
 struct FAT_BOOTSECTOR32
 {
+	// File System Specification
 	DWORD BPB_FATSz32;
 	WORD BPB_ExtFlags;
 	WORD BPB_FSVer;
 	DWORD BPB_RootClus;
 	WORD BPB_FSInfo;
+	// Boot Sector and Bootstrap Modification
 	WORD BPB_BKBootSec;
 	BYTE BPB_Reserved[12];
 	BYTE BPB_DrvNum;
@@ -63,6 +65,7 @@ struct FAT_BOOTSECTOR
 {
 	BYTE jmp[3];
 	BYTE oem_id[8];
+	// BIOS Parameter Block
 	WORD bytes_per_sector;
 	BYTE sectors_per_cluster;
 	WORD reserved_sectors;
@@ -75,6 +78,14 @@ struct FAT_BOOTSECTOR
 	WORD heads;
 	DWORD hidden_sectors;
 	DWORD total_sectors_large;
+	/**
+	BYTE physical_disk_num;
+	BYTE current_head;
+	BYTE signature;
+	BYTE vol_serial_num[4];
+	BYTE vol_label[11];
+	BYTE sys_id[8];
+	*/
 	union
 	{
 		struct FAT_BOOTSECTOR16 bs16;
