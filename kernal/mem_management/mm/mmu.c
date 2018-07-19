@@ -44,8 +44,8 @@ static inline size_t page_table_index(uintptr_t virtual_address)
 
 typedef struct {
     bit_field present : 1;
-    bit_field rw : 1; // read/write
-    bit_field us : 1; // user/supervisor
+    bit_field rw : 1;       // read/write
+    bit_field us : 1;       // user/supervisor
     bit_field : 2;
     bit_field a : 1;
     bit_field d : 2;
