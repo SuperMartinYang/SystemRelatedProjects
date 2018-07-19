@@ -12,7 +12,7 @@
 #define FAT_PROCESS_CONTINUE	-2
 #define FAT_PROCESS_SUCCESS		0
 
-#define FAT_CLUSTER12(c)	(c & 0x00000FFF)
+#define FAT_CLUSTER12(c)	(c & 0x00000FFF)	// get the fat_data ptr
 #define FAT_CLUSTER16(c)	(c & 0x0000FFFF)
 #define FAT_CLUSTER31(c)	(c & 0x0FFFFFFF)
 
@@ -141,10 +141,10 @@ struct FAT_MOUNTPOINT
 	struct FAT_BOOTSECTOR bootsector;
 	struct FAT_ENTRY * rootdir;
 	BYTE type;
-	BYTE * fat_data;
-	int fat_size;
-	int cluster_size;
-	int total_clusters;
+	BYTE * fat_data;		// ptr to fat data (clusters)
+	int fat_size;			// the number of cluster in each fat
+	int cluster_size;		// the size of each cluster
+	int total_clusters;		// total cluster available
 } PACKED;
 
 struct FAT_FILE

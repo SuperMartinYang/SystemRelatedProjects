@@ -79,14 +79,31 @@ Fields in FAT_FILE
 ###	Structures
 Fields in VFS_HANDLE
 
+Byte Offset (in hex) | Field Length | Sample Value | Meaning
+---|---:|---:|---
+
 
 Fields in VFS_FILESYSTEM_CALLTABLE
-
+ * ptrs to operations on VFS
 
 Fields in VFS_FILESYSTEM
 
+Byte Offset (in hex) | Field Length | Sample Value | Meaning
+---|---:|---:|---
+04 | 4 bytes |  | file system type
+3C | 56 bytes |  | pointers to operations on VFS
+40 | 4 bytes |  | pointer to the next vfs in the list
 
 Fields in VFS_MOUNTPOINT
 
+Byte Offset (in hex) | Field Length | Sample Value | Meaning
+---|---:|---:|---
+
 
 Fields in VFS_DIRLIST_ENTRY
+
+Byte Offset (in hex) | Field Length | Sample Value | Meaning
+---|---:|---:|---
+0 | 32 bytes | hello.txt | filename
+20 | 4 bytes |  | attributes
+24 | 4 bytes |  | file size 
