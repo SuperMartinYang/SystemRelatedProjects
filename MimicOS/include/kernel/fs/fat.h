@@ -147,7 +147,7 @@ struct FAT_MOUNTPOINT
 	int total_clusters;		// total cluster available
 } PACKED;
 
-struct FAT_FILE
+struct FAT_FILE			// file info
 {
 	struct FAT_MOUNTPOINT * mount;
 	struct FAT_ENTRY entry;
