@@ -27,7 +27,7 @@ void fat_setFATCluster(struct FAT_MOUNTPOINT * mount, int cluster, int value, in
 	} 
 }
  
- 
+/* Get next cluster */
 int fat_getFATCluster(struct FAT_MOUNTPOINT * mount, int cluster){
 	int next_cluster;
 	switch(mount->type){
@@ -178,7 +178,7 @@ int fat_getIndex(struct FAT_ENTRY * dir, char * name){
 	}
 	return FAIL;
 }
-
+/* read the file info into the last parameter -> FAT_FILE * file */
 int fat_file2entry(struct FAT_MOUNTPOINT * mount, char * filename, struct FAT_ENTRY * entry, struct FAT_FILE * file){
 	int i, dir_index = FAIL, length, dir_cluster = FAIL;
 	char * curr_name;
@@ -303,10 +303,188 @@ int fat_updateFileEntry(struct FAT_FILE * file){
 				}
 			}
 		}
+		// write file data to dir cluster
 		memcpy(&dir[file->dir_index], &file->entry, sizeof(struct FAT_ENTRY));
-		ret = fat_rwCluster(file->mount, file->dir_cluster, (BYTE *)dir, FAT_WRITE);
+		ret = fat_rwCluster(file->mount, file->dir_cluster, (BYTE *)dir, FAT_WRITE);	
 	}
 	mm_kfree(dir);
 	return res;
 }
 
+int fat_setFileSize(struct FAT_FILE * file, int size){
+	// don't do anything if trying to set the same size
+	if (file->entry.file_size == size)
+		return SUCCESS;
+	if (size < file->entry.file_size){
+		/**
+		// shrink
+		// TO-DO: traverse the cluster chain(backwards) and mark them all free
+		int cluster = entry[index].start_cluster;
+		// set the first cluster to be free
+		fat_setFATCluster( mount, cluster, FAT_FREECLUSTER, FALSE );
+		while( cluster != FAT_FREECLUSTER )
+		{
+			// get the next cluster
+			cluster = fat_getFATCluster( mount, cluster );
+			if( cluster == FAT_FREECLUSTER || cluster == FAIL )
+				break;
+			// set the next cluster to be free
+			fat_setFATCluster( mount, cluster, FAT_FREECLUSTER, FALSE );
+		}
+		// commit the FAT to disk
+		fat_setFATCluster( mount, cluster, FAT_FREECLUSTER, TRUE );
+		*/
+	}
+	// set the new size
+	file->entry.file_size = size;
+	return fat_updateFileEntry(file);  // write it back to cluster
+}
+
+void * fat_mount(char * device, char * mountpoint, int fstype){
+	int root_dir_offset;
+	struct FAT_MOUNTPOINT * mount = (struct FAT_MOUNTPOINT *)mm_kmalloc(sizeof(struct FAT_MOUNTPOINT));
+	if (mount == NULL)
+		return NULL;
+	// open the device we wish to mount
+	mount->device = vfs_open(device, VFS_MODE_READWRITE);
+	if (mount->device == NULL){
+		mm_kfree(mount);
+		return NULL;
+	}
+	// read in the bootsector
+	vfs_read(mount->device, (void *)&mount->bootsector, sizeof(struct FAT_BOOTSECTOR));
+	// make sure we have a valid bootsector
+	if (mount->bootsector.magic != FAT_MAGIC){
+		vfs_close(mount->device);
+		mm_kfree(mount);
+		return NULL;
+	}
+	// determine if we have a FAT 12, 16, or 32 filesystem
+	fat_determineType(mount);
+	mount->cluster_size = mount->bootsector.bytes_per_sector * mount->bootsector.sectors_per_cluster;
+	mount->fat_size = mount->bootsector.sectors_per_fat * mount->bootsector.bytes_per_sector;
+	mount->fat_data = (BYTE *)mm_kmalloc(mount->fat_size);
+	memset(mount->fat_data, 0x00, mount->fat_size);
+	// read device info to fat
+	vfs_read(mount->device, (void *)mount->fat_data, mount->fat_size);
+	
+	mount->rootdir = (struct FAT_ENTRY *)mm_kmalloc(mount->bootsector.num_root_dir_ents * sizeof(struct FAT_ENTRY));
+	memset(mount->rootdir, 0x00, mount->bootsector.num_root_dir_ents * sizeof(struct FAT_ENTRY));
+	// find and read in the root directory
+	// | FAT_BOOTSECTOR | FAT0 | FAT1 | ROOT_DIRS (32)
+	root_dir_offset = (mount->bootsector.num_fats * mount->fat_size) + sizeof(struct FAT_BOOTSECTOR) + 1
+	vfs_seek(mount->device, root_dir_offset, VFS_SEEK_START);
+	vfs_read(mount->device, (void *)mount->rootdir, mount->bootsector.num_root_dir_ents * sizeof(struct FAT_ENTRY));
+	// successfully return the new FAT mount
+	return mount;
+}
+
+int fat_unmount(struct VFS_MOUNTPOINT * mount, char * mountpoint){
+	struct FAT_MOUNTPOINT * fat_mount;
+	if ((fat_mount = (struct FAT_MOUNTPOINT *)mount->data_ptr) == NULL)
+		return FAIL;
+	vfs_close(fat_mount->device);
+	mm_kfree(fat_mount->root_dir);	// bot-up free
+	mm_kfree(fat_mount)
+	return SUCCESS;
+}
+
+/* find the file and assign the FAT_FILE to handle, for vfs to operate on it */
+struct VFS_HANDLE * fat_open(struct VFS_HANDLE * handle, char * filename){
+	struct FAT_MOUNTPOINT * fat_mount;
+	struct FAT_FILE * file;
+	if ((fat_mount = (struct FAT_MOUNTPOINT *)handle->mount->data_ptr) == NULL)
+		return FAIL;
+	file = (struct FAT_FILE *)mm_kmalloc(sizeof(struct FAT_FILE));
+	// try to find the file
+	if (fat_file2entry(fat_mount, filename, NULL, file) == NULL){
+		mm_kfree(file);
+		return NULL;
+	}
+	// find out, set the mountpoint this file is on
+	file->mount = fat_mount;
+	// set the current file position to zero
+	file->current_pos = 0;
+	// associate the handle with the file entry
+	handle->data_ptr = file;
+	// if we opened the file in truncate mode we need to set the size to be zero
+	if (handle->mode & VFS_MODE_TRUNCATE == VFS_MODE_TRUNCATE){
+		if (fat_setFileSize(file, 0) == FAIL){
+			mm_kfree(file);
+			return NULL;
+		}
+	}
+	return handle;
+}
+
+/* after vfs want to close the file. free the allocated file */
+int fat_close(struct VFS_HANDLE * handle){
+	// check we have a fat entry associate with this handle
+	if (handle->data_ptr == NULL)
+		return FAIL;
+	mm_kfree(handle->data_ptr);
+	return SUCCESS;
+}
+
+int fat_clone(struct VFS_HANDLE * handle, struct VFS_HANDLE * clone){
+	// CURRENTLY NOT SUPPORTED
+	return FAIL;
+}
+
+int fat_rw(struct VFS_HANDLE * handle, BYTE * buffer, DWORD size, int mode){
+	int bytes_to_rw = 0, bytes_rw = 0, cluster_offset = 0;
+	int cluster, i;
+	struct FAT_FILE * file;
+	BYTE * clusterBuffer;
+	if ((file = (struct FAT_FILE *)handle->data_ptr) == NULL)
+		return FAIL;
+	// initially set the cluster number to the first cluster as specified in the file entry
+	cluster = file->entry.start_cluster;
+	// get the correct cluster to begin reading / writing from
+	i = file->current_pos / file->mount->cluster_size;
+	// we traverse the cluster chain i times
+	while (i --){
+		// get the next cluster in the file
+		cluster = fat_getFATCluster(file->mount, cluster);
+		// fail if we have gone beyond the files cluster chain
+		if (cluster == FAT_FREECLUSTER || cluster == FAIL)
+			return FAIL;
+	}
+
+	// reduce size if we are trying to read past the end of the file
+	if (file->current_pos + size > file->entry.file_size){
+		// but if we are writing we will need to expand the file size
+		if (mode == FAT_WRITE){
+			// add enough new clusters for writing
+			int new_clusters = (size / file->mount->cluster_size) + 1;
+			int prev_cluster = cluster, next_cluster;
+			// alloc more clusters
+			while (new_clusters --){
+				// get a free cluster
+				next_cluster = fat_getFreeCluster(file->mount);
+				if (next_cluster == FAIL)
+					return FAIL;
+				// add it on the cluster chain of this file
+				fat_setFATCluster(file->mount, prev_cluster, next_cluster, FALSE);
+				// update our previous cluster number
+				prev_cluster = new_cluster;
+			}
+			//terminate the cluster chain and commit the FAT to the disk
+			fat_setFATCluster(file->mount, prev_cluster, FAT_ENDOFCLUSTER, TRUE);
+		}else 
+			size = file->entry.file_size - file->current_pos;
+	}
+	// handle reads / writes that begin from some point inside a cluster
+	cluster_offset = file->current_pos % file->mount->cluster_size;
+	//allocate a buffer to read / write data into
+	clusterBuffer = (BYTE *)mm_kmalloc(file->mount->cluster_size);
+	// read / write data
+	while (TRUE){
+		// set the amount of data we want to read / write in this loop iteration
+		if (size > file->mount->cluster_size)
+			bytes_to_rw = file->mount->cluster_size;
+		else
+			bytes_to_rw = size;
+		// TO-DO
+	}
+}

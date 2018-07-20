@@ -123,7 +123,7 @@ struct FAT_ATTRIBUTE
 #define FAT_NAMESIZE		8
 #define FAT_EXTENSIONSIZE	3
 
-struct FAT_ENTRY
+struct FAT_ENTRY   		// store file specify info, like data
 {
 	BYTE name[FAT_NAMESIZE];
 	BYTE extension[FAT_EXTENSIONSIZE];
@@ -132,7 +132,7 @@ struct FAT_ENTRY
 	struct FAT_DOSTIME time;
 	struct FAT_DOSDATE date;
 	WORD start_cluster;
-	DWORD file_size;
+	DWORD file_size;	
 } PACKED;
 
 struct FAT_MOUNTPOINT
@@ -150,10 +150,10 @@ struct FAT_MOUNTPOINT
 struct FAT_FILE			// file info
 {
 	struct FAT_MOUNTPOINT * mount;
-	struct FAT_ENTRY entry;
+	struct FAT_ENTRY entry;	 // the real content of file 
 	int dir_cluster;
 	int dir_index;
-	int current_pos;
+	int current_pos;		// used as a cursor when read or write to the file
 } PACKED;
 
 int fat_init(void);

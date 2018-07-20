@@ -20,10 +20,10 @@
 #define VFS_MODE_TRUNCATE	8
 #define VFS_MODE_APPEND		9
 
-struct VFS_HANDLE
+struct VFS_HANDLE		// used to operate on data_ptr
 {
 	struct VFS_MOUNTPOINT * mount;
-	void * data_ptr;
+	void * data_ptr;	// always point to struct FAT_FILE
 	int mode;
 };
 
@@ -57,7 +57,7 @@ struct VFS_FILESYSTEM
 struct VFS_MOUNTPOINT
 {
 	struct VFS_FILESYSTEM * fs;
-	void * data_ptr;
+	void * data_ptr;		// FAT_MOUNTPOINT, stores fs content
 	char * mountpoint;
 	char * device;
 	struct VFS_MOUNTPOINT * next;
