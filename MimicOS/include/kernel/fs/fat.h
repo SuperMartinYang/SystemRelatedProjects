@@ -115,7 +115,7 @@ struct FAT_ATTRIBUTE
 	int hidden:1;
 	int system:1;
 	int volumelabel:1;
-	int directory:1;
+	int directory:1;		// indicate this file is a directory
 	int archive:1;
 	int reserved:2;
 } PACKED;

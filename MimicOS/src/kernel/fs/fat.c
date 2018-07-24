@@ -6,6 +6,9 @@
 #include <lib/libc/ctype.h>
 #include <lib/libc/string.h>
 
+#define DEBUG FALSE
+
+/* set the fat_data to given value */
 void fat_setFATCluster(struct FAT_MOUNTPOINT * mount, int cluster, int value, int commit){
 	switch(mount->type){
 		case FAT_12:
@@ -112,9 +115,10 @@ int fat_cluster2block(struct FAT_MOUNTPOINT * mount, int cluster){
 
 }
 
+/* read / write data from / to cluster */
 int fat_rwCluster(struct FAT_MOUNTPOINT * mount, int cluster, BYTE * clusterBuffer, int mode){
 	int i, block;
-	rw vfs_rw;
+	rw vfs_rw;	// function ptr
 
 	if (mode == FAT_READ)
 		vfs_rw = vfs_read;
@@ -241,6 +245,7 @@ int fat_file2entry(struct FAT_MOUNTPOINT * mount, char * filename, struct FAT_EN
 	return SUCCESS;
 }
 
+// set the file with name
 int fat_setFileName(struct FAT_FILE * file, char * name){
 	int i, x;
 	// these are defined in the official FAT spec
@@ -279,6 +284,7 @@ int fat_setFileName(struct FAT_FILE * file, char * name){
 	return SUCCESS;
 }
 
+/* update the file entry to the disk */
 int fat_updateFileEntry(struct FAT_FILE * file){
 	int ret = FAIL;
 	struct FAT_ENTRY * dir;
@@ -485,6 +491,242 @@ int fat_rw(struct VFS_HANDLE * handle, BYTE * buffer, DWORD size, int mode){
 			bytes_to_rw = file->mount->cluster_size;
 		else
 			bytes_to_rw = size;
-		// TO-DO
+		// test if we are reading / writing across 2 cluster. if we are, we can only read / write up to the end of the first cluster
+		// in this iteration of the loop, the next iteration will take care of the rest
+		// this solution is ugly, more than likely a much cleaner way of checking for this
+		// TO-DO --> make the code into cleaner way
+		if ((cluster_offset + bytes_to_rw) > (((file->current_pos / file->mount->cluster_size) + 1) * file->mount->cluster_size)){
+			bytes_to_rw = (cluster_offset + bytes_to_rw) - (((file->current_pos / file->mount->cluster_size) + 1) * file->mount->cluster_size);
+			bytes_to_rw = size - bytes_to_rw;
+		}
+		// set up the clusterBuffer if we are going to perform a write operation
+		if (mode == FAT_WRITE){
+			// if we are writing from a point inside a cluster (as opposed to an entire clsuter) we will need to 
+			// read in the original cluster to preserve the data before the cluster offset
+			if (cluster_offset > 0 || bytes_to_rw < file->mount->cluster_size){
+				if (fat_rwCluster(file->mount, cluster, clusterBuffer, FAT_READ) == FAIL)
+					break;
+			}else {
+				memset(clusterBuffer, 0x00, file->mount->cluster_size);
+			}
+			// copy the data from buffer to clusterBuffer
+			memcpy((clusterBuffer + cluster_offset), buffer, bytes_to_rw);
+		}
+		// read / write the next cluster of data. if we fail should we reset the file offset position if it's changed?
+		if (fat_rwCluster(file->mount, cluster, clusterBuffer, mode) == FAIL)
+			break;
+		// if we performed a read operation, copy the cluster data into buffer
+		if (mode == FAT_READ)
+			memcpy(buffer, (clusterBuffer + cluster_offset), bytes_to_rw)
+		// move the buffer pointer back
+		buffer += bytes_to_rw;
+		// increase the bytes read / written
+		bytes_rw += bytes_to_rw;
+		// reduce the size
+		size -= bytes_to_rw;
+		// test if we have read / written enough
+		if (size <= 0)
+			break;
+		// get the next cluster to read / write
+		cluster = fat_getFATCluster(file->mount, cluster);
+		// we've reached the end of cluster chain
+		if (the cluster == FAT_FREECLUSTER || cluster == FAIL)
+			// for write oper, new cluster need to be allocated
+			break;
+		cluster_offset = 0;
 	}
+	// free the clusterBuffer
+	mm_kfree(clusterBuffer);
+	// update the file pos
+	file->current_pos += bytes_rw;
+	// return the counts read / written
+	return bytes_rw;	
 }
+
+int fat_read(struct VFS_HANDLE * handle, BYTE * buffer, DWORD size){
+	return fat_rw(handle, buffer, size, FAT_READ);
+}
+
+// write data and update the file entry
+int fat_write(struct VFS_HANDLE * handle, BYTE * buffer, DWORD size){
+	struct FAT_FILE * file;
+	int bytes_written, orig_position;
+	// retrieve the file structure
+	if ((file = (struct FAT_FILE *)handle->data_ptr) == NULL)
+		return FAIL;
+	orig_position = file->current_pos;
+	bytes_written = fat_rw(handle, buffer, size, FAT_WRITE);
+	if (bytes_written >= 0){
+		if ((orig_position + bytes_written) > file->entry.file_size)
+			return fat_setFileSize(file, (orig_position + bytes_written));
+		return SUCCESS;
+	}
+	return FAIL;
+}
+
+// set new file position
+int fat_seek(struct VFS_HANDLE * handle, DWORD offset, BYTE origin){
+	struct FAT_FILE * file;
+	int saved_pos;
+	// retrieve the file structure
+	if ((file = (struct FAT_FILE *)handle->data_ptr) == NULL)
+		return FAIL;
+	// save the original position in case we need to roll back
+	saved_pos = file->current_pos;
+	// set the new position, 3 mode, set/add/minus
+	if (origin == VFS_SEEK_START)
+		file->current_pos = offset;
+	else if (origin == VFS_SEEK_CURRENT)
+		file->current_pos += offset;
+	else if (origin == VFS_SEEK_END)
+		file->current_pos = file->entry.file_size - offset;
+	else
+		return FAIL;
+	// reset if we have gone over the file size
+	if (file->current_pos > file->entry.file_size || file->current_pos < 0)
+		file->current_pos = saved_pos;
+	return file->current_pos;
+}
+
+int fat_control(struct VFS_HANDLE * handle, DWORD request, DWORD arg){
+	// don't need to support and control calls
+	return FAIL;
+}
+
+// create a file, like "/dir0/dir1/dir2/file1.txt"
+int fat_create(struct VFS_MOUNTPOINT * mount, char * filename){
+	int ret = FAIL;
+	BOOL create_dir = FALSE;
+	char * dirname;
+	struct FAT_FILE * file;
+	struct FAT_DOSTIME time;
+	struct FAT_DOSDATE data;
+	struct FAT_MOUNTPOINT * fat_mount;
+	// retrieve the fat mount structure;
+	if ((fat_mount = (struct FAT_MOUNTPOINT *)mount->data_ptr) == NULL)
+		return FAIL;
+	// create a new file, alloc first
+	file = (struct FAT_FILE *)mm_kmalloc(struct FAT_FILE);
+	dirname = (char *)mm_kmalloc(strlen(filename) + 1);	// 1 for '\0'
+	strcpy(dirname, filename);
+
+#ifdef DEBUG
+	kernel_printf("[1] dirname(%d) %s filename(%d) %s\n",strlen(dirname),dirname,strlen(filename),filename);
+#endif
+
+	// check if we are trying to create a file which already exists
+	if (fat_file2entry(fat_mount, filename, NULL, NULL) == FAIL){
+		// not exist
+		char * tmp;
+		// decompose the filename into its directory portion and the filename portion
+		// strcpy(filename, dirname);
+		// filename = '/dir1/dir2/dir3/', or filename = '/', or filename = '/dir1/file.txt'
+		if (filename[strlen(filename) - 1] == '/'){
+			create_dir = TRUE;
+			filename[strlen(filename) - 1] = 0x00;
+			strcpy(dirname, filename);
+		}
+		// dirname == ''
+		tmp = strrchr(dirname, '/');	
+		if (tmp == NULL){
+			strcpy(dirname, '/');
+			// memcpy(&file->entry, &fat_mount->rootdir, sizeof(struct FAT_ENTRY));
+			// is_root = TRUE;
+		}else {
+			// filename = '/dir1/dir2/dir3'
+			//                      tmp -> 0x00  filename = dir3
+			// dirname = '/dir1/dir2'
+			tmp[1] = 0x00;
+			filename = strrchr(filename, '/') + 1;
+		}
+
+#ifdef DEBUG
+	kernel_printf("[1] dirname(%d) %s filename(%d) %s\n",strlen(dirname),dirname,strlen(filename),filename);
+#endif
+		// TO-DO
+		// try to find the directory we wish to create the file in
+		if (fat_file2entry(fat_mount, dirname, NULL, file) == SUCCESS){
+			// set the FAT_MOUNT it exists on
+			file->mount = fat_mount;
+			// we don't have a directory index yet
+			file->dir_index = FAIL;
+			// set the new files direcotry cluster
+			file->dir_cluster = file->entry.start_cluster;
+			// set the current position to zero
+			file->current_pos = 0;
+			// clear the entry structure so we can fill in the new files details
+			memset(&file->entry, 0x00, sizeof(struct FAT_ENTRY));
+			// set the file name and extension
+			if (fat_setFileName(file, filename) == SUCCESS){
+				// set default time
+				time.hours = 0;
+				time.minutes = 0;
+				time.twosecs = 0;
+				memcpy(&file->entry.time, time, sizeof(struct FAT_DOSTIME));
+				date.data = 0;
+				date.month = 0;
+				date.year = 0;
+				memcpy(&file->entry.date, date, sizeof(struct FAT_DOSDATE));
+				// set its initial size to zero
+				file->entry.file_size = 0;
+				if (create_dir){
+					// set the attribute as a directory
+					file->entry.attribute.directory = TRUE;
+					// alloc an initial cluster for the directory and its entries
+					file->entry.start_cluster = fat_getFreeCluster(file->mount);
+					if (file->entry.start_cluster != (WORD) FAIL){
+						// for one entry
+						struct FAT_ENTRY * entry = (struct FAT_ENTRY *)mm_kmalloc(file->mount->cluster_size);
+						memset(entry, 0x00, file->mount->cluster_size);
+						// write entry to file->entry
+						fat_rwCluster(file->mount, file->entry.start_cluster, (BYTE *)entry, FAT_WRITE);
+						// terminate the cluster chain and commit the FAT to disk
+						fat_setFATCluster(file->mount, file->entry.start_cluster, FAT_ENDOFCLUSTER, TRUE);
+						mm_kfree(entry);
+					}else {
+						#ifdef
+							kernel_printf("[create] start_cluster fail\n");
+						#endif
+						mm_kfree(dirname);
+						mm_kfree(file);
+						return FAIL;
+					}
+				}else {
+					// set the attribute as a archive file
+					file->entry.attribute.archive = TRUE;
+					// we have no start cluster yet
+					file->entry.start_cluster = FAT_FREECLUSTER;
+				}
+				// update the new files entry to disk
+				ret = fat_updateFileEntry(file);
+			}
+
+		}
+
+	}
+	mm_kfree(dirname);
+	mm_kfree(file);
+	return res;
+}
+
+
+int fat_delete(struct VFS_MOUNTPOINT * mount, char * filename){
+	int ret = FAIL;
+	struct FAT_FILE * file;
+	struct FAT_MOUNTPOINT * fat_mount;
+	if ((fat_mount = (struct FAT_MOUNTPOINT *)mount->data_ptr) == NULL)
+		return FAIL;
+	file = (struct FAT_FILE *)mm_kmalloc(sizeof(struct FAT_FILE));
+	file->mount = fat_mount;
+
+	// try to find the file
+	if (fat_file2entry(fat_mount, filename, NULL, file) == SUCCESS){
+		// mark the file as deleted
+		file->entry.name[0] = FAT_ENTRY_DELETED;
+		// TO-DO, so when cluster is needed, it should also use this as free cluster
+		ret = fat_setFileSize(file, 0);	
+	}
+	mm_kfree(file);
+	return ret;
+}
+
