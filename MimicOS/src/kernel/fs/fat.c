@@ -182,7 +182,7 @@ int fat_getIndex(struct FAT_ENTRY * dir, char * name){
 	}
 	return FAIL;
 }
-/* read the file info into the last parameter -> FAT_FILE * file */
+/* read the file info into the last parameter -> FAT_FILE * file and entry */
 int fat_file2entry(struct FAT_MOUNTPOINT * mount, char * filename, struct FAT_ENTRY * entry, struct FAT_FILE * file){
 	int i, dir_index = FAIL, length, dir_cluster = FAIL;
 	char * curr_name;
@@ -729,4 +729,127 @@ int fat_delete(struct VFS_MOUNTPOINT * mount, char * filename){
 	mm_kfree(file);
 	return ret;
 }
+
+/* change the file name */
+int fat_rename(struct VFS_MOUNTPOINT * mount, char * src, char * dst){
+	int ret = FAIL;
+	struct FAT_FILE * file;
+	struct FAT_MOUNTPOINT * fat_mount;
+	if ((fat_mount = (struct FAT_MOUNTPOINT *)mount->data_ptr) == NULL)
+		return FAIL;
+	file = (struct FAT_FILE *)mm_kmalloc(sizeof(struct FAT_FILE));
+	file->mount = fat_mount;
+	// try to find the file
+	if (fat_file2entry(fat_mount, src, NULL, file) == SUCCESS){
+		if ((dst = strrchr(dst, '/')) != NULL){
+			// rename the entry (advancing the dest pointer past the /)
+			if (fat_setFileName(file, ++dst) == SUCCESS)
+				ret = fat_updateFileEntry(file);
+		}
+	}
+	mm_kfree(file);
+	return ret;
+}
+
+/* TO-DO, copy file */
+int fat_copy(struct VFS_MOUNTPOINT * mount, char * src, char * dst){
+	return FAIL;
+}
+
+/* ls */
+struct VFS_DIRLIST_ENTRY * fat_list(struct VFS_MOUNTPOINT * mount, char * dirname){
+	int dirIndex, entryIndex, nameIndex, extIndex;
+	struct FAT_ENTRY * dir;
+	struct VFS_DIRLIST_ENTRY * entry;
+	// retrieve the fat_mount structure
+	struct FAT_MOUNTPOINT * fat_mount;
+	if ((fat_mont = (struct FAT_MOUNTPOINT *)mount->data_ptr) == NULL)
+		return FAIL;
+	if (strlen(dirname) == 0)
+		dir = fat_mount->rootdir
+	else{
+		dir = (struct FAT_ENTRY *)mm_kmalloc(fat_mount->cluster_size);
+		if (fat_file2entry(fat_mount, dirname, dir, NULL) < 0){
+			mm_kfree(dir);
+			return FAIL;
+		}
+		fat_rwCluster(fat_mount, dir->start_cluster, (BYTE *)dir, FAT_READ); // -> dir is storing the first file info (FAT_FILE)
+	}
+
+	entry = (struct VFS_DIRLIST_ENTRY *)mm_kmalloc(sizeof(struct VFS_DIRLIST_ENTRY) * 32);	// for each dir, it can has 32 entries (sub files)
+	// clear it
+	memset(entry, 0x00, sizeof(struct VFS_DIRLIST_ENTRY) * 32);
+
+	for (dirIndex = 0, entryIndex = 0; entryIndex < 32 || dirIndex < 16; dirIndex ++){
+		// test if their are any more entries
+		if (dir[dirIndex].name[0] == 0x00)
+			break;
+		// if the file is deleted, continue past it
+		if (dir[dirIndex].name[0] == FAT_ENTRY_DELETED)
+			continue;
+		// if the file size is negative, past it
+		if (dir[dirIndex].file_size == -1)
+			continue;
+		// fill in the name
+		memset(entry[entryIndex].name, 0x00, VFS_NAMESIZE);
+		for (nameIndex = 0; nameIndex < FAT_NAMESIZE; nameIndex ++){
+			if (dir[dirIndex].name[nameIndex] == FAT_PADBYTE)	// end of filename
+				break;
+			entry[entryIndex].name[nameIndex] = tolower(dir[dirIndex].name[nameIndex]);
+		}
+		// and the extension if there is one
+		if (dir[dirIndex].extension[0] != FAT_PADBYTE){
+			entry[entryIndex].name[nameIndex ++] = '.';
+			for (extIndex = 0; extIndex < FAT_EXTENSIONSIZE; extIndex ++){
+				if (dir[dirIndex].extension[extIndex] == FAT_PADBYTE)
+					break;
+				entry[entryIndex].name[nameIndex ++] = dir[dirIndex].extension[extIndex];
+			}
+		}
+		// fill in the attributes
+		if (dir[dirIndex].attributes.directory)
+			entry[entryIndex].attributes.directory = VFS_DIRECTORY;
+		else
+			entry[entryIndex].attributes.directory = VFS_FILE;
+		// file in the size
+		entry[entryIndex].size = dir[dirIndex].file_size;
+		entryIndex ++;
+	}
+	mm_kfree(dir);
+	return entry;	// caller must free this buffer, it's better to parse buffer from caller *TO-DO
+}
+
+
+int fat_init(void){
+	struct VFS_FILESYSTEM * fs;
+	fs = (struct VFS_FILESYSTEM *)mm_kmalloc(sizeof(VFS_FILESYSTEM));
+	// set the file system type
+	fs->fstype = FAT_TYPE;
+	// setup the file system calltable
+	fs->calltable.open    = fat_open;
+	fs->calltable.close   = fat_close;
+	fs->calltable.clone   = fat_clone;
+	fs->calltable.read    = fat_read;
+	fs->calltable.write   = fat_write;
+	fs->calltable.seek    = fat_seek;
+	fs->calltable.control = fat_control;
+	fs->calltable.create  = fat_create;
+	fs->calltable.delete  = fat_delete;
+	fs->calltable.rename  = fat_rename;
+	fs->calltable.copy    = fat_copy;
+	fs->calltable.list    = fat_list;
+	fs->calltable.mount   = fat_mount;
+	fs->calltable.unmount = fat_unmount;
+	// register the file system with the VFS
+	return vfs_register(fs);
+}
+
+
+
+
+
+
+
+
+
 
