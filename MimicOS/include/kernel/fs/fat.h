@@ -131,7 +131,7 @@ struct FAT_ENTRY   		// store file specify info, like data
 	BYTE reserved[10];
 	struct FAT_DOSTIME time;
 	struct FAT_DOSDATE date;
-	WORD start_cluster;
+	WORD start_cluster;		// the first cluster store data
 	DWORD file_size;	
 } PACKED;
 
@@ -147,7 +147,7 @@ struct FAT_MOUNTPOINT
 	int total_clusters;		// total cluster available
 } PACKED;
 
-struct FAT_FILE			// file info
+struct FAT_FILE			// file info, if it's a directory, entry is just 
 {
 	struct FAT_MOUNTPOINT * mount;
 	struct FAT_ENTRY entry;	 // the real content of file 
