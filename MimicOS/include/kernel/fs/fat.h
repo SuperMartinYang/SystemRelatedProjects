@@ -131,7 +131,7 @@ struct FAT_ENTRY   		// store file specify info, like data
 	BYTE reserved[10];
 	struct FAT_DOSTIME time;
 	struct FAT_DOSDATE date;
-	WORD start_cluster;		// the first cluster store data
+	WORD start_cluster;		// the first cluster store file entries
 	DWORD file_size;	
 } PACKED;
 

@@ -47,7 +47,7 @@ struct VFS_FILESYSTEM_CALLTABLE
 	int (*unmount)(struct VFS_MOUNTPOINT *, char *);
 };
 
-struct VFS_FILESYSTEM
+struct VFS_FILESYSTEM  	// file system struction, linked list
 {
 	int fstype;
 	struct VFS_FILESYSTEM_CALLTABLE calltable;
@@ -65,7 +65,7 @@ struct VFS_MOUNTPOINT		// virtual fs content, linked list
 
 #define VFS_NAMESIZE	32
 
-struct VFS_DIRLIST_ENTRY
+struct VFS_DIRLIST_ENTRY	// used to store file item tiny info
 {
 	char name[VFS_NAMESIZE];
 	int attributes;
