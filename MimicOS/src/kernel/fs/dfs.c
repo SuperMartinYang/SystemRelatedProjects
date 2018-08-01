@@ -182,7 +182,7 @@ int dfs_init(void){
 	fs->calltable.control 	= dfs_control;
 	fs->calltable.create 	= dfs_create;
 	fs->calltable.delete 	= dfs_delete;
-	fs->calltable.rename 	= dfs_reanme;
+	fs->calltable.rename 	= dfs_rename;
 	fs->calltable.copy 		= dfs_copy;
 	fs->calltable.list 		= dfs_list;
 	fs->calltable.mount 	= dfs_mount;
