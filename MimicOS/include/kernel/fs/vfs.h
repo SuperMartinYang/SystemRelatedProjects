@@ -23,7 +23,7 @@
 struct VFS_HANDLE		// used to operate on data_ptr
 {
 	struct VFS_MOUNTPOINT * mount;
-	void * data_ptr;	// always point to struct FAT_FILE
+	void * data_ptr;	// always point to struct FAT_FILE, which we can use to get file content
 	int mode;
 };
 

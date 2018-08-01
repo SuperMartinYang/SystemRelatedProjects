@@ -137,7 +137,7 @@ struct FAT_ENTRY   		// store file specify info, like data
 
 struct FAT_MOUNTPOINT
 {
-	struct VFS_HANDLE * device;
+	struct VFS_HANDLE * device;		// here device can be treat as a file 
 	struct FAT_BOOTSECTOR bootsector;
 	struct FAT_ENTRY * rootdir;
 	BYTE type;

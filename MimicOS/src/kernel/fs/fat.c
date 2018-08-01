@@ -314,7 +314,7 @@ int fat_updateFileEntry(struct FAT_FILE * file){
 		ret = fat_rwCluster(file->mount, file->dir_cluster, (BYTE *)dir, FAT_WRITE);	
 	}
 	mm_kfree(dir);
-	return res;
+	return ret;
 }
 
 int fat_setFileSize(struct FAT_FILE * file, int size){
@@ -378,7 +378,7 @@ void * fat_mount(char * device, char * mountpoint, int fstype){
 	memset(mount->rootdir, 0x00, mount->bootsector.num_root_dir_ents * sizeof(struct FAT_ENTRY));
 	// find and read in the root directory
 	// | FAT_BOOTSECTOR | FAT0 | FAT1 | ROOT_DIRS (32)
-	root_dir_offset = (mount->bootsector.num_fats * mount->fat_size) + sizeof(struct FAT_BOOTSECTOR) + 1
+	root_dir_offset = (mount->bootsector.num_fats * mount->fat_size) + sizeof(struct FAT_BOOTSECTOR) + 1;
 	vfs_seek(mount->device, root_dir_offset, VFS_SEEK_START);
 	vfs_read(mount->device, (void *)mount->rootdir, mount->bootsector.num_root_dir_ents * sizeof(struct FAT_ENTRY));
 	// successfully return the new FAT mount
@@ -391,7 +391,7 @@ int fat_unmount(struct VFS_MOUNTPOINT * mount, char * mountpoint){
 		return FAIL;
 	vfs_close(fat_mount->device);
 	mm_kfree(fat_mount->root_dir);	// bot-up free
-	mm_kfree(fat_mount)
+	mm_kfree(fat_mount);
 	return SUCCESS;
 }
 
