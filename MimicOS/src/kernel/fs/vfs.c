@@ -80,5 +80,39 @@ int vfs_mount(char * device, char * mountpoint, int fstype){
 }
 
 int vfs_unmount(char * mountpoint){
-	
+	struct VFS_MOUNTPOINT * mount, * m;
+	char name[VFS_MAXFILENAME], * name_ptr;
+	// copy the name so we can modify it
+	name_ptr = (char *)&name;
+	strcpy(name_ptr, mountpoint);
+	// find the mountpoint
+	for (mount = vfs_mpTail; mount!= NULL; mount = mount->next){
+		// if we have a match we break from the search
+		if (strcmp(mount->mountpoint,name_ptr) == 0)
+			break;
+	}
+	// fail if we can't find it
+	if (mount == NULL)
+		return FAIL;
+	// call the file system driver to unmount
+	if (mount->fs->calltable.unmount == NULL)
+		return FAIL;
+	mount->fs->calltable.unmount(mount, name_ptr);
+	// remove the mount point from the VFS
+	if (mount == vfs_mpTail)
+		vfs_mpTail = mount->next;
+	else {
+		for (m = vfs_mpTail; m != NULL; m = m->next){
+			// if we found mount's pre
+			if (m->next = mount)
+				break;
+		}
+		m->next = mount->next;
+	}
+	// free the mount structure
+	mm_kfree(mount->mountpoint);
+	mm_kfree(mount->device);
+	mm_kfree(mount);
+	return SUCCESS;
 }
+
