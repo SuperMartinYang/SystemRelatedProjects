@@ -54,11 +54,11 @@ struct VFS_FILESYSTEM  	// file system struction, linked list
 	struct VFS_FILESYSTEM * prev;
 };
 
-struct VFS_MOUNTPOINT		// virtual fs content, linked list
+struct VFS_MOUNTPOINT		// virtual fs content, linked list, actually file
 {
 	struct VFS_FILESYSTEM * fs;
 	void * data_ptr;		// FAT_MOUNTPOINT, stores fs content
-	char * mountpoint;
+	char * mountpoint;		// filename
 	char * device;
 	struct VFS_MOUNTPOINT * next;
 };

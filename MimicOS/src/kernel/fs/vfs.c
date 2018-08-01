@@ -116,3 +116,15 @@ int vfs_unmount(char * mountpoint){
 	return SUCCESS;
 }
 
+struct VFS_MOUNTPOINT * vfs_file2mountpoint(char * filename){
+	struct VFS_MOUNTPOINT * mount;
+	// find the mountpoint
+	for (mount = vfs_mpTail; mount != NULL; mount = mount->next){
+		// if we have a match, brak, we use strncmp instead of strcmp
+		// to avoid comparing the null char at the end of the mountpoint
+		if (strncmp(mount->mountpoint, filename, strlen(mount->mountpoint)) == 0)
+			break;
+	}
+	return mount;
+}
+
