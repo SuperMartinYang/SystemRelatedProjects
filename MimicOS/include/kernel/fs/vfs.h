@@ -58,7 +58,7 @@ struct VFS_MOUNTPOINT		// virtual fs content, linked list, actually file
 {
 	struct VFS_FILESYSTEM * fs;
 	void * data_ptr;		// FAT_MOUNTPOINT, stores fs content
-	char * mountpoint;		// filename
+	char * mountpoint;		// mountpoint name, e.g. /dir1/file1.txt, mountpoint="/dir1"
 	char * device;
 	struct VFS_MOUNTPOINT * next;
 };

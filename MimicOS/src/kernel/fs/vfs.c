@@ -128,6 +128,7 @@ struct VFS_MOUNTPOINT * vfs_file2mountpoint(char * filename){
 	return mount;
 }
 
+<<<<<<< HEAD
 // open the file, actually get the VFS_HANDLE for other usage
 struct VFS_HANDLE * vfs_open(char * filename, int mode){
 	struct VFS_HANDLE * handle;
@@ -169,10 +170,54 @@ struct VFS_HANDLE * vfs_open(char * filename, int mode){
 					if (mount->fs->calltable.open(handle, name_ptr) != NULL){
 						if ((handle->mode & VFS_MODE_APPEND) == VFS_MODE_APPEND)
 							vfs_seek(handle, 0, VFS_SEEK_END);
+=======
+struct VFS_HANDLE * vfs_open( char * filename, int mode ){
+	struct VFS_HANDLE * handle;
+	struct VFS_MOUNTPOINT * mount;
+	char name[VFS_MAXFILENAME], * name_ptr;
+	// copy the name so we can modify it
+	name_ptr = (char *)&name;
+	strcpy( name_ptr, filename );
+	// find the correct mountpoint for this file
+	mount = vfs_file2mountpoint( name_ptr );
+	if( mount == NULL )
+		return NULL;
+	// advance the filname past the mount point
+	name_ptr = (char *)( name_ptr + strlen(mount->mountpoint) );
+	// call the file system driver to open
+	if( mount->fs->calltable.open == NULL )
+		return NULL;
+	// create the new virtual file handle	
+	handle = (struct VFS_HANDLE *)mm_kmalloc( sizeof(struct VFS_HANDLE) );
+	handle->mount = mount;
+	handle->mode = mode;
+	// try to open the file on the mounted file system
+	if( mount->fs->calltable.open( handle, name_ptr ) != NULL ){	
+		// set the file position to the end of the file if in append mode
+		if( (handle->mode & VFS_MODE_APPEND) == VFS_MODE_APPEND )
+			vfs_seek( handle, 0, VFS_SEEK_END );
+		return handle;
+	}else{
+		// if we fail to open the file but are in create mode, we can create the file
+		//     TO-DO: test the failed open() result for a value like FILE_NOT_FOUND
+		//     otherwise we could end up in an infinite recurive loop
+		if( (handle->mode & VFS_MODE_CREATE) == VFS_MODE_CREATE ){	
+			if( mount->fs->calltable.create != NULL ){
+				// try to create it
+				name_ptr = (char *)&name;
+				strcpy( name_ptr, filename );
+				name_ptr = (char *)( name_ptr + strlen(mount->mountpoint) );
+
+				if( mount->fs->calltable.create( mount, name_ptr ) != FAIL ){
+					if( mount->fs->calltable.open( handle, name_ptr ) != NULL ){
+						if( (handle->mode & VFS_MODE_APPEND) == VFS_MODE_APPEND )
+							vfs_seek( handle, 0, VFS_SEEK_END );
+>>>>>>> a0e15c3e72c1de9d9796f932ac34596792dae26e
 						return handle;
 					}
 				}
 			}
+<<<<<<< HEAD
 		}
 	}
 	// free handle
@@ -244,4 +289,204 @@ int vfs_write(struct VFS_HANDLE * handle, BYTE * buffer, DWORD size){
 
 int vfs_seek(struct VFS_HANDLE * handle, DWORD offset, BYTE origin){
 	
+=======
+		}		
+	}
+	// if we fail, free the handle and return NULL
+	mm_kfree( handle );
+	return NULL;
+}
+
+int vfs_close( struct VFS_HANDLE * handle ){
+	if( handle == NULL )
+		return FAIL;
+	if( handle->mount->fs->calltable.close != NULL ){
+		int ret;
+		ret = handle->mount->fs->calltable.close( handle );
+		mm_kfree( handle );
+		return ret;
+	}
+	return FAIL;	
+}
+
+struct VFS_HANDLE * vfs_clone( struct VFS_HANDLE * handle ){
+	struct VFS_HANDLE * clone;
+
+	if( handle == NULL )
+		return NULL;
+
+	if( handle->mount->fs->calltable.clone != NULL ){
+		clone = (struct VFS_HANDLE *)mm_kmalloc( sizeof(struct VFS_HANDLE) );
+		clone->mount = handle->mount;
+		clone->mode = handle->mode;
+
+		if( handle->mount->fs->calltable.clone( handle, clone ) == FAIL ){
+			mm_kfree( clone );
+			return NULL;
+		}
+		
+		return clone;
+	}
+
+	return NULL;
+}
+
+int vfs_read( struct VFS_HANDLE * handle, BYTE * buffer, DWORD size  ){
+	if( handle == NULL )
+		return FAIL;
+	// test if the file has been opened in read mode first
+	if( (handle->mode & VFS_MODE_READ) != VFS_MODE_READ )
+		return FAIL;
+	// try to call the file system driver to read
+	if( handle->mount->fs->calltable.read != NULL )
+		return handle->mount->fs->calltable.read( handle, buffer, size  );
+	// if we get here we have failed
+	return FAIL;
+}
+
+int vfs_write( struct VFS_HANDLE * handle, BYTE * buffer, DWORD size ){
+	int ret;
+	if( handle == NULL )
+		return FAIL;
+	// test if the file ha been opened in read mode first
+	if( (handle->mode & VFS_MODE_WRITE) != VFS_MODE_WRITE )
+		return FAIL;
+	// try to call the file system driver to write
+	if( handle->mount->fs->calltable.write != NULL ){
+		ret = handle->mount->fs->calltable.write( handle, buffer, size );
+		if( ret != FAIL ){
+			// set the file position to the end of the file if in append mode
+			if( (handle->mode & VFS_MODE_APPEND) == VFS_MODE_APPEND )
+				vfs_seek( handle, 0, VFS_SEEK_END );
+			// return the write result
+			return ret;
+		}
+	}
+	// if we get here we have failed
+	return FAIL;
+}
+
+int vfs_seek( struct VFS_HANDLE * handle, DWORD offset, BYTE origin ){
+	if( handle == NULL )
+		return FAIL;
+	if( handle->mount->fs->calltable.seek != NULL )
+		return handle->mount->fs->calltable.seek( handle, offset, origin  );
+	return FAIL;
+}
+
+int vfs_control(struct VFS_HANDLE * handle, DWORD request, DWORD arg){
+	if (handle == NULL)
+		return FAIL;
+	if (handle->mount->fs->calltable.control != NULL)
+		handle->mount->fs->calltable.control(handle, request, arg);
+	return FAil;
+}
+
+int vfs_create(char * filename){
+	struct VFS_MOUNTPOINT * mount;
+	char name[VFS_MAXFILENAME], * name_ptr;
+
+	name_ptr = (char *)&name;
+	strcpy(name_ptr, filename);
+	mount = vfs_file2mountpoint(name_ptr);
+	if (mount == NULL)
+		return FAIL;
+	// advance the filename, 
+	name_ptr = (char *)(name_ptr + strlen(mount->mountpoint));
+	if (mount->fs->calltable.create != NULL)
+		return mount->fs->calltable.create(mount, name_ptr);
+	return FAIL;
+}
+
+int vfs_delete(char * filename){
+	struct VFS_MOUNTPOINT * mount;
+	char name[VFS_MAXFILENAME], * name_ptr;
+	
+	name_ptr = (char *)&name;
+	strcpy(name_ptr, filename);
+	mount = vfs_file2mountpoint(name_ptr);
+
+	if (mount == NULL)
+		return FAIL;
+	
+	name_ptr = (char *)(name_ptr + strlen(mount->mountpoint));
+	if (mount->fs->calltable.delete != NULL)
+		return mount->fs->calltable.delete(mount, name_ptr)
+	return FAIL;
+}
+
+int vfs_rename(char * src, char * dst){
+	struct VFS_MOUNTPOINT * mount;
+	char srcname[VFS_MAXFILENAME], * src_ptr;
+	char dstname[VFS_MAXFILENAME], * dst_ptr;
+	// copy the name for modify
+	src_ptr = (char *)&srcname;
+	strcpy(src_ptr, src);
+	dst_ptr = (char *)&dstname;
+	strcpy(dst_ptr, dst);
+
+	mount = vfs_file2mountpoint(src_ptr);
+	if (mount == NULL)
+		return FAIL;
+	
+	src_ptr = (char *)(src_ptr + strlen(mount->mountpoint));
+	dst_ptr = (char *)(dst_ptr + strlen(mount->mountpoint));
+
+	if (mount->fs->calltable.rename != NULL)
+		return mount->fs->calltable.rename(mount, src_ptr, dst_ptr);
+	return FAIL;
+}
+
+int vfs_copy(char * src, char * dst){
+		struct VFS_MOUNTPOINT * mount;
+	char srcname[VFS_MAXFILENAME], * src_ptr;
+	char dstname[VFS_MAXFILENAME], * dst_ptr;
+	// copy the name so we can modify it
+	src_ptr = (char *)&src;
+	strcpy( src_ptr, src );
+	dst_ptr = (char *)&dst;
+	strcpy( dst_ptr, dst );
+
+	mount = vfs_file2mountpoint( src_ptr );
+	if( mount == NULL )
+		return FAIL;
+	
+	src_ptr = (char *)( src_ptr + strlen(mount->mountpoint) );
+	dst_ptr = (char *)( dst_ptr + strlen(mount->mountpoint) );
+	// try to copy the file on the mounted file system
+	if( mount->fs->calltable.copy != NULL )
+		return mount->fs->calltable.copy( mount, src_ptr, dst_ptr );
+	// return fail
+	return FAIL;	
+}
+
+struct VFS_DIRLIST_ENTRY * vfs_list(char * dir){
+	struct VFS_MOUNTPOINT * mount;
+	char name[VFS_MAXFILENAME], * name_ptr;
+	name_ptr = (char *)&name;
+	strcpy(name_ptr, dir);
+	// dir should be sth like "/dir1/dir2/" 
+	if (dir[strlen(name_ptr) - 1] != '/')
+		return NULL;
+	mount = vfs_file2mountpoint(name_ptr);
+	if (mount == NULL)
+		return NULL;
+	name_ptr = (char *)(name_ptr + strlen(mount->mountpoint));
+
+	if (mount->fs->calltable.list != NULL){
+		struct VFS_DIRLIST_ENTRY * entry;
+		entry = mount->fs->calltable.list(mount, name_ptr);
+		return entry;
+	}
+	return NULL;
+}
+
+int vfs_init(void){
+	// basic first
+	dfs_init();
+	vfs_mount(NULL, "/amos/device/", DFS_TYPE);
+	// initialize FAT FILE SYSTEM
+	fat_init();
+	return SUCCESS;
+>>>>>>> a0e15c3e72c1de9d9796f932ac34596792dae26e
 }
