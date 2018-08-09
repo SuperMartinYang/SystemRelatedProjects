@@ -1,7 +1,7 @@
 #ifndef _KERNEL_MM_SEGMENTATION_H_
 #define _KERNEL_MM_SEGMENTATION_H_
 
-#define <sys/types.h>
+#include <sys/types.h>
 
 #define SEGMENTTATION_GDT_ENTRYS    6
 

@@ -16,10 +16,10 @@ struct MRC_BITS
 #define DMA_CLEARMASK   0
 #define DMA_SETMASK     0
 
-struct MODE_BITS
+struct MODE_BITS                        // 8 bits
 {
-    unsigned int channel:2;
-    unsigned int transfertype:2;
+    unsigned int channel:2;             // DMA_CHANNEL0
+    unsigned int transfertype:2;        // DMA_READ...
     unsigned int autoinit:1;
     unsigned int addressincrement:1;
     unsigned int modeselect:2;
@@ -53,7 +53,7 @@ struct MODE
 #define DMA_WRITE       1
 #define DMA_READ        2
 
-// MODE_BITS->channel
+// MODE_BITS->channel, 2bits to present
 #define DMA_CHANNEL0    0
 #define DMA_CHANNEL1    1
 #define DMA_CHANNEL2    2
