@@ -14,7 +14,7 @@
 #define BITMAP_BYTE_INDEX( address )    ( ((DWORD)address / SIZE_4KB) / 8)
 // index inside the page
 #define BITMAP_BIT_INDEX( address )     ( 8 - (((DWORD)address / SIZE_4KB) % 8) - 1 )
-// actual address in mem
+// actual address in mem, set bitmap 
 #define physical_pageAllocAddress(a)    (physical_bitmap[ BITMAP_BYTE_INDEX(a) ] |= (1 << BITMAP_BIT_INDEX(a)))
 
 int physical_getBitmapSize();

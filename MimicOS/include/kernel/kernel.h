@@ -29,6 +29,6 @@ void kernel_printInfo(void);
 
 void kernel_printf(char *, ...);
 
-void kernel_panic(struct PROCESS_stack *, char *);
+void kernel_panic(struct PROCESS_stack *, char *);  // to print errors
 
 #endif
