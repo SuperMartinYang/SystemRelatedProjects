@@ -50,7 +50,22 @@ void mm_pmemcpyfrom(void * dst_vaddress, void src_paddress, int size){
     interrupt_enableAll();
 }
 
-// increase the processes 
+// increase the processes heap by some amount, this will be rounded up to the page size
 void * mm_morecore(struct PROCESS_INFO * process, DWORD size){
-
-}
+    // calculate how many page we will need
+    int pages = (size / PAGE_SIZE) + 1;
+    // when process->heap.heap_top == NULL, we must create the initial heap
+    if (process->heap.heap_top == NULL)
+        process->heap.heap_top = process->heap.heap_base;
+    void * prevTop = process->heap.heap_top;
+    // create the page
+    for (; pages-- > 0; process->heap.heap_top += PAGE_SIZE){
+        // alloc a physical page in memory
+        void * physicalAddress = physical_pageAlloc();
+        // map it onto the end of the process heap
+        paging_map(process, process->heap.heap_top, physicalAddress, TRUE);
+        memset(process->heap.heap_top, 0x00, PAGE_SIZE);
+    }
+    // return the start address of the memory we allocated to the heap
+    return prevTop;
+} 
