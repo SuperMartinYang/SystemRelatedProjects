@@ -49,4 +49,34 @@ void page_setPageTableEntry(struct PROCESS_INFO *, void *, void *, BOOL);
 struct PAGE_TABLE_ENTRY * paging_getPageTableEntry(struct PROCESS_INFO * p, void * linearAddress){
     struct PAGE_DIRECTORY_ENTRY * pde = paging_getPageDirectoryEntry(p->page_dir, linearAddress);
     struct PAGE_TABLE * pt = (struct PAGE_TABLE *)(TABLE_SHIFT_L(pde->address));
+    if (pt == NULL){
+        int index;
+        pt = (struct PAGE_TABLE *)physical_pageAlloc();
+        paging_setPageDirectoryEntry(p, linearAddress, pt);
+        for (index = 0; index < PAGE_ENTRYS; index ++){
+            // although it will use "get", but it won't arrive here again.
+            paging_setPageTableEntry(p, linearAddress + (index * SIZE_4KB), NULL, FALSE);
+        }
+    }
+    // convert the physical address of pt into a virtual address before reading/writing
+    pt = (struct PAGE_TABLE *)paging_mapQuick(pt);
+    // return the entry which is now a virtual address in the current address space
+    return (struct PAGE_TABLE_ENTRY *)&pt->entry[GET_TABLE_INDEX(linearAddress)];
 }
+
+void paging_setPageTableEntry(struct PROCESS_INFO * p, void * linearAddress, void * physicalAddress, BOOL present){
+    struct PAGE_TABLE_ENTRY * pte = paging_getPageTableEntry(p, PAGE_ALIGN(linearAddress));
+    pte->present        = present;
+    pte->readwrite      = READWRITE;
+    pte->user           = p->privilege;
+    pte->writethrough   = 0;
+    pte->cachedisabled  = 0;
+    pte->accessed       = 0;
+    pte->dirty          = 0;
+    pte->attributeindex = 0;
+    pte->globalpage     = 0;
+    pte->available      = 0;
+    pte->address        = TABLE_SHIFT_R(PAGE_ALIGN(physicalAddress));
+}
+
+
