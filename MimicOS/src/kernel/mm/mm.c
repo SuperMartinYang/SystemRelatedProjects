@@ -69,3 +69,42 @@ void * mm_morecore(struct PROCESS_INFO * process, DWORD size){
     // return the start address of the memory we allocated to the heap
     return prevTop;
 } 
+
+// free a previously allocated item from the kernel heap
+void mm_kfree(void * address){
+	struct MM_HEAPITEM * tmp_item, * item;
+	// sanity check
+	if (addresss == NULL)
+		return;
+	// lock this critical section
+	mutex_lock(&mm_kmallocLock);
+	// set the item to remove
+	item = (struct MM_HEAPITEM *)(address - sizeof(struct MM_HEAPITEM));
+	for (tmp_item = kernel_process.heap.heap_base; tmp_item != NULL; tmp_item = tmp_item->next){
+		if (tmp_item == item){
+			// free it
+			tmp_item->used = FALSE;
+			// coalesce any adjacent free items
+			for (tmp_item = kernel_process.heap.heap_base; tmp_item != NULL; tmp_item = tmp_item->next){
+				while (!tmp_item->used && tmp_item->next != NULL && !tmp_item->next->used){
+					tmp_item->size += sizeof(struct MM_HEAPITEM) + tmp_item->next->size;
+					tmp_item->next = tmp_item->next->next;
+				}
+			}
+			// break and return as we are finished
+			break;
+		}
+	}
+	// unlock this critical section
+	mutex_unlock(&mm_kmallocLock);	
+}
+
+
+
+
+
+
+
+
+
+
