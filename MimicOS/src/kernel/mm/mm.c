@@ -99,6 +99,55 @@ void mm_kfree(void * address){
     mutex_unlock(&mm_kmallocLock);	
 }
 
+// allocates an arbiturary size of memory (via first fit) from the kernel heap
+// TO-DO: optimize structure
+void * mm_kmalloc(DWORD size){
+    struct MM_HEAPITEM * new_item = NULL, * tmp_item;
+    int total_size;
+    // sanity check
+    if (size == 0)
+        return NULL;
+    // lock the critical section
+    mutex_lock(&&mm_kmallocLock);
+    // round up by 8 bytes and add header size
+    total_size = ((size + 7) & ~7) + sizeof(struct MM_HEAPITEM);
+    if (kernel_process.heap.heap_top != NULL){
+        // search for first fit
+        for (new_item=kernel_process.heap.heap_base; new_item != NULL; new_item = new_item->next){
+            if (!new_item->used && (total_size <= new_item->size))
+                break;
+        }
+    }
+    // if we found one
+    if (new_item != NULL){
+        tmp_item = (struct MM_HEAPITEM *)((int)new_item + tot_size);
+        tmp_item->size = new_item->size - total_size;
+        tmp_item->used = FALSE;
+        tmp_item->next = new_item->next;
+    }else {
+        // didn't find a fit so we must increase the heap to fit
+        new_item = mm_morecore(&kernel_process, total_size);
+        if (new_item == NULL){
+            // failed
+            mutex_unlock(&mm_kmallocLock);
+            return NULL;
+        }
+        // create an empty item for the extra space 
+        // we can calculate the size because morecore() allocates space that is page aligned
+        tmp_item = (struct MM_HEAPITEM *)((int)new_item + total_size);
+        tmp_item->size = PAGE_SIZE - (total_size % PAGE_SIZE ? total_size % PAGE_SIZE : total_size) - sizeof(struct MM_HEAPITEM);
+        tmp_item->used = FALSE;
+        tmp_item->next = NULL;
+    }
+    // create the new item
+    new_item->size = size;
+    new_item->used = TURE;
+    new_item->next = tmp_item;
+    // unlock
+    mutex_unlock(&mm_kmallocLock);
+    // return newly allocated memory location, after heap header, data area
+    return (void *)((int)new_item + sizeof(struct MM_HEAPITEM));
+}
 
 
 

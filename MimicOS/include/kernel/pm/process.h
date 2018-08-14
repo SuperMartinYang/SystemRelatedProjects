@@ -57,14 +57,16 @@ enum
 struct PROCESS_HEAP
 {
 	void * heap_base;
-	void * heap_top;
+    // NULL if empty, expand when required
+	void * heap_top;    
 }
 
+// processes are linked together
 struct PROCESS_INFO
 {
-	//
 	struct PROCESS_STACK * kstack;
-	struct PAGE_DIRECTORY * page_dir;
+    // the page in physical
+	struct PAGE_DIRECTORY * page_dir;   
 	unsigned int privilege;
 	void * kstack_base;
 
@@ -74,6 +76,7 @@ struct PROCESS_INFO
 	int state;
 	char name[VFS_NAMESIZE];
 	struct VFS_HANDLE * handles[PROCESS_MAXHANDLES];
+    // heap, first fit
 	struct PROCESS_HEAP heap;
 
 	struct PROCESS_INFO * prev;

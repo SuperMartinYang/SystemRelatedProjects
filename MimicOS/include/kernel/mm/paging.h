@@ -40,6 +40,7 @@
 // From Intel IA32 Architecture Software Developers Manual Vol. 3 (3-24)
 struct PAGE_DIRECTORY_ENTRY
 {
+    // TRUE means it's in memory
 	unsigned int present:1;
 	unsigned int readwrite:1;
 	unsigned int user:1;
@@ -55,7 +56,7 @@ struct PAGE_DIRECTORY_ENTRY
 
 struct PAGE_TABLE_ENTRY
 {
-	unsigned int present:1;
+	unsigned int present:1;     
 	unsigned int readwrite:1;
 	unsigned int user:1;
 	unsigned int writethrough:1;

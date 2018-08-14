@@ -5,7 +5,8 @@
 #include <kernel/pm/process.h>
 #include <kernel/multiboot.h>
 
-struct MM_HEAPITEM
+// heap item structure, can be optimized
+struct MM_HEAPITEM      
 {
 	struct MM_HEAPITEM *next;
 	unsigned int size; 
