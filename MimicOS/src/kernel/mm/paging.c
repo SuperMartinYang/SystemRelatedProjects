@@ -79,4 +79,60 @@ void paging_setPageTableEntry(struct PROCESS_INFO * p, void * linearAddress, voi
     pte->address        = TABLE_SHIFT_R(PAGE_ALIGN(physicalAddress));
 }
 
+void PROCESS_INFO * paging_pageFaultHandler(struct PROCESS_INFO * process){
+    void * linearAddress;
+    // retrieve the linear address of the page fault stored in CR2
+    ASM("movl %%cr2, %0" : "=r" (linearAddress));
+    kernel_printf("Page Fault at CS:EIP %x:%x Address %x\n", process->kstack->cs, process->kstack->eip, linearAddress);
+    // if the kernel caused the page fault we must kernel panic
+    if (process->id == KERNEL_PID)
+        kernel_panic(process->kstack, "Kernel Page Fault.");
+    // print out the stack
+    process_printStack(process->kstack);
+    // try to kill the offending process
+    if (process_kill(process_id) == SUCCESS)
+        return schedular_select(NULL);
+    // if we filled to kill the process, we don't need to perform a context switch
+    return process;
+}
 
+int paging_createDirectory(struct PROCESS_INFO * p){
+    int index;
+    struct PAGE_DIRECTORY * pd;
+    // lock
+    mutex_lock(&paging_lock);
+    // allocate some physical memory for the page directory
+    p->page_dir = (struct PAGE_DIRECTORY *)physical_pageAlloc();
+    if (p->page_dir == NULL){
+        mutex_unlock(&paging_lock);
+        return FAIL;
+    }
+    // map the p->page_dir physical address into the current address space so we can read/write to it
+    pd = (struct PAGE_DIRECTORY *)paging_mapQuick(p->page_dir);
+    memset(pd, 0x00, sizeof(struct PAGE_DIRECTORY));
+    // set some default entrys in the page directory
+    for (index = 0; index < PAGE_ENTRYS; index ++){
+        // get the next entry
+        struct PAGE_DIRECTORY_ENTRY * pde = &pd->entry[index];
+        // set the privilege to the process
+        pde->user = p->privilege;
+        // if it's the last entry
+        if (index == PAGE_ENTRYS - 1){
+            // store the page dir as the last entry in itself( fractal mapping )
+            pde->present = TRUE;
+            pde->readwrite = READWRITE;
+            pde->address = TABLE_SHIFT_R(p->page_dir);
+        }else {
+            pde->present = FALSE;
+            pde->readwrite = READONLY;
+        }
+    }
+    // unlock
+    mutex_unlock(&paging_lock);
+    return SUCCESS;
+}
+
+//TO-DO
+void paging_destroyDirectory(struct PROCESS_INFO * p){
+
+}
